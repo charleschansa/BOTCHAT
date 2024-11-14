@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crop Disease Detection Chatbot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        #chat-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 300px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        #chatbox {
+            height: 300px;
+            padding: 10px;
+            overflow-y: scroll;
+            background-color: #f9f9f9;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .user-message {
+            background-color: #e0e0e0;
+            text-align: right;
+        }
+        .bot-message {
+            background-color: #d4edda;
+            text-align: left;
+        }
+        #user-input-container {
+            display: flex;
+            border-top: 1px solid #ccc;
+            background-color: #fff;
+        }
+        #user-input {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 0;
+        }
+        #send-button, #upload-button {
+            padding: 10px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        #file-input {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="chatbox"></div>
+        <div id="user-input-container">
+            <input type="text" id="user-input" placeholder="Type a message...">
+            <button id="send-button">Send</button>
+            <button id="upload-button">Upload Image</button>
+        </div>
+        <input type="file" id="file-input" name="file" accept="image/*">
+    </div>
+
+    <script>
+        const chatbox = document.getElementById('chatbox');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const uploadButton = document.getElementById('upload-button');
+        const fileInput = document.getElementById('file-input');
+        let lastDiseaseName = '';
+
+        sendButton.addEventListener('click', function() {
+            const message = userInput.value.trim();
+            if (message === '') {
+                return; // Do not send if the message is empty
+            }
+            addMessage(message, 'user-message');
+            userInput.value = '';
+
+            sendMessageToBot(message);
+        });
+
+        uploadButton.addEventListener('click', function() {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', async function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const response = await fetch('/predict', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    const diseaseName = result.prediction;
+                    lastDiseaseName = diseaseName; // Store the disease name
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const imageElement = `<img src="${e.target.result}" alt="Uploaded Image" style="max-width: 100%; border-radius: 5px;">`;
+                        addMessage(`${imageElement}<br>Prediction: ${diseaseName}`, 'bot-message');
+                        sendMessageToBot(`Tell me more about ${diseaseName}`);
+                    };
+                    reader.readAsDataURL(file);
+                } catch (error) {
+                    console.error('Error during prediction:', error);
+                    addMessage(`Error during prediction: ${error.message}`, 'bot-message');
+                }
+            }
+        });
+
+        async function sendMessageToBot(message) {
+            try {
+                // Include the last detected disease name in the message if it exists
+                const fullMessage = lastDiseaseName ? `${message} about ${lastDiseaseName}` : message;
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message: fullMessage })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                addMessage(result.response, 'bot-message');
+            } catch (error) {
+                console.error('Error during chat:', error);
+                addMessage(`Error during chat: ${error.message}`, 'bot-message');
+            }
+        }
+
+        function addMessage(message, className) {
+            const messageElement = document.createElement('div');
+            messageElement.innerHTML = message;
+            messageElement.classList.add('message', className);
+            chatbox.appendChild(messageElement);
+            chatbox.scrollTop = chatbox.scrollHeight;
+        }
+    </script>
+</body>
+</html>
